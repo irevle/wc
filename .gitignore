@@ -1,0 +1,8 @@
+# compiled binary
+/wc
+/wc.exe
+
+# editor/OS noise
+.DS_Store
+.idea/
+.vscode/
