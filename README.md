@@ -1,22 +1,61 @@
 # wc (word counter)
 
-A small `wc` command clone I'm writing in Go to learn the language. It's simple enough that it could probably survive real use once I finish it, but it's not there yet. The flags (`-l`, `-w`, `-c`, `-m`) haven't been implemented.
+A small `wc` command clone I'm writing in Go to learn the language. It's simple enough that it could probably survive real use once I finish it.
 
-## What it does
+## Usage
 
-Point it at a file and it prints the line count, word count, character count, and filename:
+```sh
+go run main.go [-l | -w | -c | -m] <filename>
+```
+
+With no flags it prints lines, words, and bytes similar to the real `wc`:
 
 ```sh
 $ go run main.go test.txt
----- FINAL OUTPUT ----
- 3  9 67 test.txt
+  3  9 67 test.txt
 ```
 
-How each count works:
+Numbers are right-justified to the width of the widest count, so the columns stay aligned without padding smaller numbers more than they need. Column order is always lines → words → bytes → chars.
 
-- **Lines** are counted per `bufio.Scanner` iteration.
-- **Words** come from `strings.Fields`, which splits on runs of whitespace — so `"double  space"` in `test.txt` is handled fine, no special casing needed.
-- **Characters** are counted as `len(line) + 1`, where the `+1` is the newline. Note that this is really a _byte_ count, not a character count. See the problems section.
+Each count has a short and a long flag, and the short ones can be combined, so `-lw` works:
+
+- `-l` / `--lines` — newline count
+- `-w` / `--words` — word count
+- `-c` / `--bytes` — byte count
+- `-m` / `--chars` — character (rune) count
+
+```sh
+$ go run main.go -l test.txt
+ 3 test.txt
+$ go run main.go -lw test.txt
+ 3 9 test.txt
+$ go run main.go -m test.txt
+ 67 test.txt
+```
+
+`-c` and `-m` only differ when the file has multi-byte text. A file containing `café\n` is 6 bytes but 5 characters, because `é` is two bytes and one rune:
+
+```sh
+$ go run main.go -c cafe.txt
+ 6 cafe.txt
+$ go run main.go -m cafe.txt
+ 5 cafe.txt
+```
+
+Unknown short flags get the same treatment as GNU:
+
+```sh
+$ go run main.go -f test.txt
+wc: invalid option -- 'f'
+```
+
+## How it counts
+
+- Lines are counted per `bufio.Scanner` iteration.
+- Words come from `strings.Fields`, which splits on runs of whitespace — so `"double  space"` in `test.txt` doesn't need special handling.
+- Bytes are `len(line) + 1` (`+1` is the newline).
+- Characters are `utf8.RuneCountInString(line) + 1`.
+- Bundled flags like `-lw` are expanded into `-l -w` by `expandFlags` before the `flag` package sees them.
 
 ## Building
 
@@ -31,22 +70,24 @@ Requires Go 1.27.1+ (whatever's pinned in `go.mod`).
 
 Honest list of things I know are off and want to fix:
 
-- **Byte count isn't a character count.** `len()` counts bytes, so UTF-8 text gets overcounted. Real character counting needs `utf8.RuneCountInString`.
-- **Assumes every line ends in a newline.** The `+1` per line means a file without a trailing `\n` reports one extra "character".
-- **Errors are panics.** `check()` panics on failure, so a typo'd filename dumps a stack trace instead of a clean `no such file: foo.txt`. Fine for learning, bad for production.
+- **Assumes every line ends in a newline.** The `+1` per line means a file without a trailing `\n` reports one extra count.
+- **Errors are panics.** `check()` panics on failure, so a typo'd filename dumps a stack trace instead of a clean error message.
 - **One file at a time.** No multiple files, no stdin, no `total` row.
+- **Flags must come before the filename.** The `flag` package stops parsing at the first positional argument, so `wc test.txt -l` silently ignores the `-l`.
 
 ## To do
 
-- [ ] Implement `-l`, `-w`, `-c`, `-m` (and allow combining them, e.g. `-lw`)
+- [x] Implement `-l`, `-w`, `-c`, `-m` (and allow combining them, e.g. `-lw`)
 - [ ] Accept multiple files and print a `total` row
 - [ ] Read from stdin when no file is given
-- [ ] Count characters as runes instead of bytes
+- [x] Count characters as runes instead of bytes
 - [ ] Replace panics with proper error messages and exit codes
-- [ ] Add tests
+- [ ] Handle files without a trailing newline
+- [ ] Accept flags after the filename
+- [ ] Tests
 
 `test.txt` is the sample file I've been running it against.
 
 ## License
 
-MIT (see [LICENSE](LICENSE)). GNU's `wc` is GPLv3, but this is a fresh implementation that borrows no coreutils code, so it didn't have to be.
+MIT — see [LICENSE](LICENSE). GNU's `wc` is GPLv3, but this is a fresh implementation that borrows no coreutils code, so it didn't have to be.
